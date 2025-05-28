@@ -4,10 +4,12 @@ FROM registry.access.redhat.com/ubi9/go-toolset:1.23 AS builder
 WORKDIR /app
 
 # Install migrate CLI (version 4.17.0) for amd64
-RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz && \
-    mkdir bin && \
-    mv migrate bin/migrate && \
-    chmod +x bin/migrate
+RUN mkdir -p bin tmp && \
+    curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz -o tmp/migrate.tar.gz && \
+    tar -xvf tmp/migrate.tar.gz -C tmp && \
+    mv tmp/migrate bin/migrate && \
+    chmod +x bin/migrate && \
+    rm -rf tmp
 
 # Copy go.mod and go.sum to cache dependencies
 COPY go.mod go.sum ./
