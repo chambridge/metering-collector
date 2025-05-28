@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: docker.io/library/postgres:15
+    container_name: collector-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-youruser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yourpassword}
+      - POSTGRES_DB=${POSTGRES_DB:-metering}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-youruser} -d ${POSTGRES_DB:-metering}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - metering-network
+
+  metering-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: collector
+    image_name: localhost/metering-collector:latest
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-youruser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yourpassword}
+      - POSTGRES_DB=${POSTGRES_DB:-metering}
+      - ORG_ID=${ORG_ID:-youruser}
+      - PORT=8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - metering-network
+
+  partition-scripts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: collector-init
+    image_name: localhost/metering-collector:latest
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-youruser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yourpassword}
+      - POSTGRES_DB=${POSTGRES_DB:-metering}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      /app/bin/migrate -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable" -path /app/migrations up && \
+      /app/bin/create_daily_partitions && \
+      /app/bin/delete_old_partitions
+    networks:
+      - metering-network
+
+volumes:
+  postgres_data:
+
+networks:
+  metering-network:
+    driver: bridge
