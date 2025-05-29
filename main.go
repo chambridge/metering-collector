@@ -75,7 +75,10 @@ func main() {
 		}
 	}
 
+	// Register handlers
 	http.HandleFunc("/receive", handlePrometheusWrite(db))
+	http.HandleFunc("/health", handleHealth(db))
+
 	log.Printf("Starting server on port %s (TLS: %v)", getPort(), useTLS)
 	if useTLS {
 		err = server.ListenAndServeTLS(serverCertPath, serverKeyPath)
@@ -93,6 +96,26 @@ func getPort() string {
 		port = "8080"
 	}
 	return port
+}
+
+func handleHealth(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Check database connectivity
+		if err := db.Ping(); err != nil {
+			http.Error(w, fmt.Sprintf("Database ping failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Return health status
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}
 }
 
 func handlePrometheusWrite(db *sql.DB) http.HandlerFunc {
