@@ -31,7 +31,7 @@ build-container:
 	podman build -t $(IMAGE_NAME):$(IMAGE_TAG) -f Dockerfile .
 
 # Start podman-compose services
-compose-up: build-container
+compose-up:
 	@echo "Starting podman-compose services..."
 	podman-compose -f podman-compose.yml up -d
 

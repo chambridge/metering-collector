@@ -15,6 +15,3 @@ CREATE TABLE metrics (
     value DOUBLE PRECISION NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) PARTITION BY RANGE (timestamp_to_date(timestamp));
-
--- Optional: Create a unique index on (timestamp, id) for each partition
-CREATE UNIQUE INDEX metrics_timestamp_id_idx ON metrics (timestamp, id);
