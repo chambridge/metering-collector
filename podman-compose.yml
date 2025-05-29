@@ -2,18 +2,18 @@ version: '3.8'
 
 services:
   postgres:
-    image: docker.io/library/postgres:15
+    image: registry.redhat.io/rhel9/postgresql-16
     container_name: collector-db
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-youruser}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yourpassword}
-      - POSTGRES_DB=${POSTGRES_DB:-metering}
+      - POSTGRESQL_USER=${POSTGRES_USER:-metering}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD:-metering}
+      - POSTGRESQL_DATABASE=${POSTGRES_DB:-metering}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-youruser} -d ${POSTGRES_DB:-metering}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-metering} -d ${POSTGRES_DB:-metering}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,18 +21,15 @@ services:
       - metering-network
 
   metering-collector:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: quay.io/chambrid/metering-collector:latest
     container_name: collector
-    image_name: localhost/metering-collector:latest
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER:-youruser}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yourpassword}
+      - POSTGRES_USER=${POSTGRES_USER:-metering}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-metering}
       - POSTGRES_DB=${POSTGRES_DB:-metering}
-      - ORG_ID=${ORG_ID:-youruser}
+      - ORG_ID=${ORG_ID:-metering}
       - PORT=8080
     ports:
       - "8080:8080"
@@ -43,16 +40,13 @@ services:
       - metering-network
 
   partition-scripts:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: quay.io/chambrid/metering-collector:latest
     container_name: collector-init
-    image_name: localhost/metering-collector:latest
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER:-youruser}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yourpassword}
+      - POSTGRES_USER=${POSTGRES_USER:-metering}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-metering}
       - POSTGRES_DB=${POSTGRES_DB:-metering}
     depends_on:
       postgres:
