@@ -51,7 +51,7 @@ BEGIN
             NEW.labels->>'product',
             (NEW.labels->>'socket_count')::INTEGER,
             TO_DATE(TO_CHAR(TO_TIMESTAMP(NEW.timestamp / 1000), 'YYYY-MM-DD'), 'YYYY-MM-DD'),
-            0.1667 -- 10 minutes = 1/6 hour
+            0.0
         )
         ON CONFLICT (system_id, date)
         DO UPDATE SET
