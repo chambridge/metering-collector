@@ -4,7 +4,6 @@ Captures Prometheus remote write data into a Postgres database, so metering data
 ## Features
 
 - Receives Prometheus remote write data via an HTTP endpoint (`/receive`).
-- Supports client certificate authentication (optional) or `ORG_ID` environment variable for local testing.
 - Stores metrics in a PostgreSQL table partitioned by day (`timestamp`).
 - Includes scripts to create daily partitions (90 days forward) and delete old partitions (older than 90 days).
 - Uses Red Hat UBI9 images for building and running containers.
@@ -37,7 +36,6 @@ For local testing, set the following environment variables in your `.env` file:
 export POSTGRES_USER=youruser
 export POSTGRES_PASSWORD=yourpassword
 export POSTGRES_DB=metering
-export ORG_ID=org1
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
 export PORT=8080

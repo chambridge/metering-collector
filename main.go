@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -52,39 +50,12 @@ func main() {
 		Addr: ":" + getPort(),
 	}
 
-	// Configure TLS if certificate and key paths are provided
-	caCertPath := os.Getenv("CA_CERT_PATH")
-	serverCertPath := os.Getenv("SERVER_CERT_PATH")
-	serverKeyPath := os.Getenv("SERVER_KEY_PATH")
-	useTLS := caCertPath != "" && serverCertPath != "" && serverKeyPath != ""
-
-	if useTLS {
-		caCert, err := os.ReadFile(caCertPath)
-		if err != nil {
-			log.Fatalf("Failed to read CA certificate: %v", err)
-		}
-
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCert) {
-			log.Fatalf("Failed to append CA certificate to pool")
-		}
-
-		server.TLSConfig = &tls.Config{
-			ClientCAs:  caCertPool,
-			ClientAuth: tls.RequireAndVerifyClientCert,
-		}
-	}
-
 	// Register handlers
 	http.HandleFunc("/receive", handlePrometheusWrite(db))
 	http.HandleFunc("/health", handleHealth(db))
 
-	log.Printf("Starting server on port %s (TLS: %v)", getPort(), useTLS)
-	if useTLS {
-		err = server.ListenAndServeTLS(serverCertPath, serverKeyPath)
-	} else {
-		err = server.ListenAndServe()
-	}
+	log.Printf("Starting server on port %s", getPort())
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
@@ -125,13 +96,6 @@ func handlePrometheusWrite(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		// Extract org_id from client certificate or environment variable
-		orgID, err := extractOrgID(r)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to determine organization ID: %v", err), http.StatusUnauthorized)
-			return
-		}
-
 		// Read and decompress the request body
 		compressed, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -155,13 +119,12 @@ func handlePrometheusWrite(db *sql.DB) http.HandlerFunc {
 		// Process and store metrics
 		for _, ts := range req.Timeseries {
 			metric := Metric{
-				OrgID:     orgID,
 				Labels:    make(map[string]string),
 				Timestamp: 0,
 				Value:     0,
 			}
 
-			// Extract metric name from labels
+			// Extract metric name and labels
 			for _, label := range ts.Labels {
 				if label.Name == "__name__" {
 					metric.Name = label.Value
@@ -169,6 +132,15 @@ func handlePrometheusWrite(db *sql.DB) http.HandlerFunc {
 					metric.Labels[label.Name] = label.Value
 				}
 			}
+
+			// Extract org_id from external_organization label
+			orgID, ok := metric.Labels["external_organization"]
+			if !ok || orgID == "" {
+				log.Printf("Missing or empty external_organization label in metric: %s", metric.Name)
+				http.Error(w, "Missing external_organization label", http.StatusBadRequest)
+				return
+			}
+			metric.OrgID = orgID
 
 			// Extract timestamp and value from samples
 			for _, sample := range ts.Samples {
@@ -179,7 +151,7 @@ func handlePrometheusWrite(db *sql.DB) http.HandlerFunc {
 			// Convert labels to JSON for PostgreSQL JSONB
 			labelsJSON, err := json.Marshal(metric.Labels)
 			if err != nil {
-				log.Printf("Failed to marshal labels: %v", err)
+				log.Printf("Failed to marshal labels for metric %s: %v", metric.Name, err)
 				continue
 			}
 
@@ -189,29 +161,11 @@ func handlePrometheusWrite(db *sql.DB) http.HandlerFunc {
 				VALUES ($1, $2, $3, $4, $5)
 			`, metric.Name, metric.OrgID, labelsJSON, metric.Timestamp, metric.Value)
 			if err != nil {
-				log.Printf("Failed to insert metric: %v", err)
+				log.Printf("Failed to insert metric %s: %v", metric.Name, err)
 				continue
 			}
 		}
 
 		w.WriteHeader(http.StatusOK)
 	}
-}
-
-func extractOrgID(r *http.Request) (string, error) {
-	// Try to extract from certificate if TLS is used
-	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
-		cert := r.TLS.PeerCertificates[0]
-		if len(cert.Subject.Organization) > 0 {
-			return cert.Subject.Organization[0], nil
-		}
-		return "", fmt.Errorf("no organization in client certificate")
-	}
-
-	// Fallback to ORG_ID environment variable
-	orgID := os.Getenv("ORG_ID")
-	if orgID == "" {
-		return "", fmt.Errorf("no client certificate provided and ORG_ID environment variable not set")
-	}
-	return orgID, nil
 }
