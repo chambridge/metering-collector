@@ -313,7 +313,8 @@ func handleMeteringQuery(db *sql.DB) http.HandlerFunc {
 
 		// Get total count
 		var total int
-		err := db.QueryRow(countQuery, args[:argIndex-2]...).Scan(&total)
+		countArgs := args[:len(args)-2] // Exclude limit and offset
+		err := db.QueryRow(countQuery, countArgs...).Scan(&total)
 		if err != nil {
 			log.Printf("Failed to count records: %v", err)
 			http.Error(w, "Database query failed", http.StatusInternalServerError)
